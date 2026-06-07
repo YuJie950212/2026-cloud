@@ -55,8 +55,8 @@ with tab1:
             }
             st.session_state["just_submitted"] = True
         if st.session_state["just_submitted"]:
-        st.success("🎉 數據已成功發送至雲端中心！請點擊切換至『2. 雲端計算大腦』分頁查看。")
-        st.session_state["just_submitted"] = False
+            st.success("🎉 數據已成功發送至雲端中心！請點擊切換至『2. 雲端計算大腦』分頁查看。")
+            st.session_state["just_submitted"] = False
 
 #Second
 with tab2:
@@ -83,7 +83,7 @@ with tab2:
     else:
         st.info("⏳ 目前雲端佇列無數據。")
 
-#T
+#Third
 with tab3:
     st.header("保險公司核心核保後台")
     
