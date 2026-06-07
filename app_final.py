@@ -18,23 +18,58 @@ tab1, tab2, tab3 = st.tabs(["1. 租車平台端 (Edge)", "2. 雲端計算大腦 
 
 #first
 with tab1:
-    st.header("邊緣端駕駛數據採集與加密")
+    st.header("🚗 邊緣端駕駛數據採集與加密")
     
+    # 1. 初始化記憶體狀態
+    if "just_submitted" not in st.session_state:
+        st.session_state["just_submitted"] = False
+        
+    # 初始化車機數據的暫存器（用來模擬從車載 OBU 抓下來的資料）
+    if "obu_speeding" not in st.session_state:
+        st.session_state["obu_speeding"] = 0
+    if "obu_braking" not in st.session_state:
+        st.session_state["obu_braking"] = 0
+
+    # 2. 模擬車機自動偵測按鈕
+    st.write("### 📡 車聯網（IoV）遠端數據整合")
+    
+    # 用一個顯眼的按鈕模擬：還車時，系統自動向雲端/車載硬體拉取這段租借期間的數據
+    if st.button("🔄 讀取該車輛還車數據（模擬車載天線/OBD-II 自動同步）", type="secondary"):
+        with st.spinner("正在連線車載 OBU 晶片，讀取行車軌跡感測器..."):
+            time.sleep(0.7)
+            # 這裡我們模擬車載硬體偵測到了該用戶超速 3 次、急煞 5 次
+            st.session_state["obu_speeding"] = 3
+            st.session_state["obu_braking"] = 5
+        st.toast("🟢 成功讀取車牌 ABC-1234 的車載 OBU 歷史數據！數據已自動帶入下方審核表單。", icon="✅")
+
+    st.write("---")
+    st.write("### ✍️ 租車公司人工審核與密碼學打包")
+
+    # 3. 審核表單（數據會被自動帶入，但依然保留微調權限，符合真實業務）
     with st.form(key="edge_data_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            speeding = st.number_input("超速次數 (0~50)", min_value=0, value=3)
-            heavy_braking = st.number_input("急煞次數 (0~50)", min_value=0, value=5)
+            # 關鍵修改：value 直接綁定剛才車機偵測到的記憶體數值
+            speeding = st.number_input(
+                "審核：超速次數 (0~50)", 
+                min_value=0, 
+                value=st.session_state["obu_speeding"]
+            )
+            heavy_braking = st.number_input(
+                "審核：急煞次數 (0~50)", 
+                min_value=0, 
+                value=st.session_state["obu_braking"]
+            )
         
         with col2:
             st.write("🔒 **邊緣端密碼學處理預覽：**")
-            st.caption("系統處於高流暢模式。點擊下方按鈕將使用演算法生成密文。")
+            st.caption("系統處於高流暢模式。點擊下方按鈕將即時調用 Paillier 演算法將審核數據生成密文。")
 
         st.write("") 
-        submit_button = st.form_submit_button(label="發送至雲端")
+        submit_button = st.form_submit_button(label="🚀 審核無誤：打包密文與 ZKP 發送至雲端")
         
     if submit_button:
-        with st.spinner("正在上傳..."):
+        with st.spinner("正在進行加密與 ZKP 證明生成..."):
             time.sleep(0.5) 
             
             pub_key, _ = paillier.generate_paillier_keypair()
@@ -53,11 +88,14 @@ with tab1:
                 "zkp_status": zkp_res,
                 "computed_score": score_res
             }
+            
             st.session_state["just_submitted"] = True
-        if st.session_state["just_submitted"]:
-            st.success("數據已成功發送至雲端中心！")
-            st.session_state["just_submitted"] = False
+            
+        st.rerun()
 
+    if st.session_state["just_submitted"]:
+        st.success("🎉 數據已成功發送至雲端中心！請點擊切換至『2. 雲端計算大腦』分頁查看。")
+        st.session_state["just_submitted"] = False
 #Second
 with tab2:
     st.header("中立雲端密文盲算中心")
