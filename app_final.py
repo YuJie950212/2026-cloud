@@ -87,7 +87,7 @@ with tab2:
 # 【分頁三：保險公司後台】（已完全修復 elif/else 順序錯誤）
 # ------------------------------------------
 with tab3:
-    st.header("🏢 保險公司核心核保後台")
+    st.header("保險公司核心核保後台")
     
     db = st.session_state["db"]
     if db["has_data"] and db["zkp_status"] == "Verified" and db["computed_score"] is not None:
