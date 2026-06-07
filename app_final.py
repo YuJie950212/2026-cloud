@@ -59,20 +59,46 @@ with tab1:
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
                 
-                # 【核心現實商務邏輯】檢查這台車目前是不是被別人霸佔著
                 cursor.execute("SELECT name FROM cars WHERE plate = ?", (rent_plate,))
                 existing_car = cursor.fetchone()
                 
                 if existing_car and existing_car[0] != "-":
-                    # 如果車牌存在，且名字不是 '-', 代表有人正在開，無情攔截！
                     st.error(f"❌ 登記失敗！車牌 {rent_plate} 目前正由租客「{existing_car[0]}」使用中，尚未結帳還車，無法重複登記！")
                     conn.close()
                 else:
-                    # 只有空車（名字是 '-'）或全新車牌，才允許登記
                     cursor.execute("INSERT OR REPLACE INTO cars (plate, name, speeding, braking, status, review_time) VALUES (?, ?, 0, 0, '待審核', '-')", (rent_plate, new_name))
                     conn.commit()
                     conn.close()
                     st.toast(f"🟢 {rent_plate} 已成功租出給 {new_name}！", icon="🚗")
+                    time.sleep(0.5)
+                    st.rerun()
+
+        st.write("---")
+        st.write("### 🗑️ 車庫車輛報廢/移除")
+        st.caption("車輛更換車牌、報廢、換車時，可從車庫清單中永久移除該車牌。")
+        
+        all_plates = df_cars["車牌號碼"].tolist()
+        target_remove_plate = st.selectbox("選擇欲移除/報廢的車牌：", ["請選擇車牌..."] + all_plates, key="remove_plate_select")
+        
+        if st.button("❌ 確認下架此車牌", type="secondary"):
+            if target_remove_plate == "請選擇車牌...":
+                st.error("❌ 請先選擇一個要移除的車牌！")
+            else:
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                # 檢查該車牌目前是否有租客正在使用中
+                cursor.execute("SELECT name FROM cars WHERE plate = ?", (target_remove_plate,))
+                row = cursor.fetchone()
+                
+                if row and row[0] != "-":
+                    st.error(f"❌ 無法移除！車牌 {target_remove_plate} 目前正由租客「{row[0]}」使用中，請先在下方辦理『還車結帳』移除租客後再行報廢。")
+                    conn.close()
+                else:
+                    # 如果是空車，允許直接從資料庫斬除
+                    cursor.execute("DELETE FROM cars WHERE plate = ?", (target_remove_plate,))
+                    conn.commit()
+                    conn.close()
+                    st.toast(f"🗑️ 車牌 {target_remove_plate} 已成功從系統車庫中移除！", icon="⚙️")
                     time.sleep(0.5)
                     st.rerun()
 
