@@ -146,15 +146,11 @@ with tab1:
     conn.close()
     
     if len(df_history) > 0:
-        # 在 dataframe 加上一欄「選取銷毀」，預設值全是 False (沒勾選)
         df_history.insert(0, "選取銷毀", False)
-        
-        # 建立控制按鈕區
         col_btn1, col_btn2 = st.columns([2, 1])
         
         with col_btn1:
             st.write("💡 **直覺維護模式**：請直接在下方表格的最左側勾選想刪除的資料：")
-            # 運用進階 st.data_editor 讓表格可以直接互動打勾
             edited_df = st.data_editor(
                 df_history,
                 column_config={"id": None, "選取銷毀": st.column_config.CheckboxColumn(help="勾選以永久抹除此筆紀錄")},
@@ -163,15 +159,12 @@ with tab1:
                 key="history_editor"
             )
             
-            # 抓出到底有哪些列被使用者打勾了
             to_delete_ids = edited_df[edited_df["選取銷毀"] == True]["id"].tolist()
             
-            # 只有當使用者「真的有在表格打勾」時，才會動態顯示刪除按鈕，實現高質感防呆
             if len(to_delete_ids) > 0:
                 if st.button(f"🗑️ 確定執行：抹除這 {len(to_delete_ids)} 筆已選取的紀錄", type="secondary"):
                     conn = sqlite3.connect(DB_FILE)
                     cursor = conn.cursor()
-                    # 批次刪除所有被打勾的 ID
                     cursor.execute(f"DELETE FROM history WHERE id IN ({','.join(['?']*len(to_delete_ids))})", to_delete_ids)
                     conn.commit()
                     conn.close()
@@ -179,7 +172,7 @@ with tab1:
                     time.sleep(0.5)
                     st.rerun()
                     
-        with col_clean2:
+        with col_btn2: # 【修正處】這裡已將原先的 col_clean2 正確對齊修正為 col_btn2
             st.write("🚨 **危險管理區**")
             confirm_all = st.checkbox("🔥 我確認要「清空整張歷史資料表」（將釋放所有儲存空間）", key="chk_all")
             if st.button("💥 執行一鍵全清空", type="primary", disabled=not confirm_all):
@@ -191,6 +184,8 @@ with tab1:
                 st.toast("💥 歷史資料庫已全部重置清空！")
                 time.sleep(0.5)
                 st.rerun()
+        
+        st.dataframe(df_history.drop(columns=["id"]), use_container_width=True)
     else:
         st.info("ℹ️ 目前資料庫尚無歷史紀錄。")
 
