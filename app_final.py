@@ -50,4 +50,4 @@ with tab1:
     st.header("🚗 邊緣端駕駛數據採集與加密")
     col_db, col_add = st.columns([2, 1])
     
-    with col_db
+    with col_db:
