@@ -100,4 +100,4 @@ with tab1:
     with st.form(key="edge_data_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"📋 **當前操作車牌：{selected_plate
+            st.write(f"📋 **當前操作車牌：{selected_plate if selected_plate != '請選擇車牌...' else '未選擇'}**")
