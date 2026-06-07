@@ -13,23 +13,11 @@ DB_FILE = "ubi_system.db"
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS cars (
-            plate TEXT PRIMARY KEY, name TEXT, speeding INTEGER, braking INTEGER, status TEXT, review_time TEXT
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, plate TEXT, data_summary TEXT, zkp_status TEXT, score TEXT
-        )
-    """)
+    cursor.execute("CREATE TABLE IF NOT EXISTS cars (plate TEXT PRIMARY KEY, name TEXT, speeding INTEGER, braking INTEGER, status TEXT, review_time TEXT)")
+    cursor.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, plate TEXT, data_summary TEXT, zkp_status TEXT, score TEXT)")
     cursor.execute("SELECT COUNT(*) FROM cars")
     if cursor.fetchone()[0] == 0:
-        initial_cars = [
-            ("ABC-1234", "張大明", 3, 5, "待審核", "-"),
-            ("XYZ-5678", "王小美", 1, 2, "待審核", "-"),
-            ("QQ-9999", "李黑客(惡意測試)", 99, 88, "待審核", "-")
-        ]
+        initial_cars = [("ABC-1234", "張大明", 3, 5, "待審核", "-"), ("XYZ-5678", "王小美", 1, 2, "待審核", "-"), ("QQ-9999", "李黑客(惡意測試)", 99, 88, "待審核", "-")]
         cursor.executemany("INSERT INTO cars VALUES (?, ?, ?, ?, ?, ?)", initial_cars)
     conn.commit()
     conn.close()
@@ -43,9 +31,7 @@ if "just_submitted" not in st.session_state:
 
 tab1, tab2, tab3 = st.tabs(["🚗 1. 租車平台端 (Edge)", "☁️ 2. 雲端計算大腦 (Cloud)", "🏢 3. 保險公司後台 (Core)"])
 
-# ==========================================
-# 【分頁一：租車平台端】
-# ==========================================
+# --- 【分頁一：租車平台端】 ---
 with tab1:
     st.header("🚗 邊緣端駕駛數據採集與加密")
     col_db, col_add = st.columns([2, 1])
@@ -59,10 +45,7 @@ with tab1:
         
     with col_add:
         st.write("### 📝 新客戶租車登記處")
-        st.caption("當庫存空車要再次租出，或有全新車輛加入時在此登記：")
-        
-        # 這裡改成可以輸入現有車牌來更新租客，或者新增全新車牌
-        rent_plate = st.text_input("租出車牌 (現有車牌或新車牌)", value="EX-5566", max_chars=10)
+        rent_plate = st.text_input("租出車牌 (現有或新車牌)", value="EX-5566", max_chars=10)
         new_name = st.text_input("新客戶姓名", value="陳小木")
         
         if st.button("➕ 確認租出（初始化行車數據）", type="primary"):
@@ -71,11 +54,7 @@ with tab1:
             else:
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
-                # 使用 INSERT OR REPLACE：如果車牌存在就覆蓋租客並初始化數據，不存在就新增
-                cursor.execute("""
-                    INSERT OR REPLACE INTO cars (plate, name, speeding, braking, status, review_time) 
-                    VALUES (?, ?, 0, 0, '待審核', '-')
-                """, (rent_plate, new_name))
+                cursor.execute("INSERT OR REPLACE INTO cars (plate, name, speeding, braking, status, review_time) VALUES (?, ?, 0, 0, '待審核', '-')", (rent_plate, new_name))
                 conn.commit()
                 conn.close()
                 st.toast(f"🟢 {rent_plate} 已成功租出給 {new_name}！", icon="🚗")
@@ -83,13 +62,10 @@ with tab1:
                 st.rerun()
 
     st.write("---")
-    
-    # 建立兩個區塊：左邊是「還車審核表單」，右邊是「還車結帳釋放系統」
     col_review, col_release = st.columns([1, 1])
     
     with col_review:
         st.write("### 🔍 1. 臨櫃選車與審核送出")
-        # 篩選出目前有租客且尚未完成這次審核的車輛（或顯示全部供選擇）
         plate_options = ["請選擇車牌..."] + df_cars["車牌號碼"].tolist()
         selected_plate = st.selectbox("選擇要辦理還車審核的車牌：", plate_options)
         
@@ -116,118 +92,13 @@ with tab1:
                 with st.spinner("正在進行加密與 ZKP 證明生成..."):
                     time.sleep(0.5)
                     pub_key, _ = paillier.generate_paillier_keypair()
+                    zkp_res, score_res = ("Verified", (speeding * 10) + (heavy_braking * 5)) if (0 <= speeding <= 50 and 0 <= heavy_braking <= 50) else ("Failed", None)
                     
-                    if 0 <= speeding <= 50 and 0 <= heavy_braking <= 50:
-                        zkp_res, score_res = "Verified", (speeding * 10) + (heavy_braking * 5)
-                    else:
-                        zkp_res, score_res = "Failed", None
-                    
-                    st.session_state["db"] = {
-                        "has_data": True,
-                        "enc_speeding": str(pub_key.encrypt(speeding).ciphertext()),
-                        "enc_braking": str(pub_key.encrypt(heavy_braking).ciphertext()),
-                        "zkp_status": zkp_res,
-                        "computed_score": score_res
-                    }
+                    st.session_state["db"] = {"has_data": True, "enc_speeding": str(pub_key.encrypt(speeding).ciphertext()), "enc_braking": str(pub_key.encrypt(heavy_braking).ciphertext()), "zkp_status": zkp_res, "computed_score": score_res}
                     
                     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     conn = sqlite3.connect(DB_FILE)
                     cursor = conn.cursor()
                     cursor.execute("UPDATE cars SET status = '🟢 已審核', review_time = ? WHERE plate = ?", (current_time, selected_plate))
-                    
-                    zkp_text = "✅ 通過" if zkp_res == "Verified" else "🚨 攔截"
-                    score_text = f"{score_res} 分" if score_res is not None else "計算終止"
-                    cursor.execute("INSERT INTO history (timestamp, plate, data_summary, zkp_status, score) VALUES (?, ?, ?, ?, ?)",
-                                   (current_time, selected_plate, f"{speeding}次 / {heavy_braking}次", zkp_text, score_text))
-                    conn.commit()
-                    conn.close()
-                    st.session_state["just_submitted"] = True
-                st.rerun()
-
-    # 【優化版】還車結帳與移除租客系統
-    with col_release:
-        st.write("### 🔄 2. 還車結帳與移除租客")
-        st.caption("當保險與財務盲算扣款確認完畢，點擊按鈕將該租客移除，車輛恢復空車待租狀態。")
-        
-        # 篩選出目前處於「已審核」狀態的車輛
-        reviewed_cars = df_cars[df_cars["狀態"] == "🟢 已審核"]["車牌號碼"].tolist()
-        
-        if len(reviewed_cars) == 0:
-            st.info("⏳ 目前沒有需要辦理結帳的車輛（請先在左側完成車輛審核送出）。")
-        else:
-            release_plate = st.selectbox("選擇要結帳並清空租客的車牌：", reviewed_cars)
-            
-            # 不需要再輸入名字，直接點擊按鈕結帳
-            if st.button("✅ 完成結帳：清空租客、數據歸零變回空車", type="secondary"):
-                conn = sqlite3.connect(DB_FILE)
-                cursor = conn.cursor()
-                # 核心業務邏輯：移除租客名字（改為 - ），數據重設為 0，狀態變回待審核
-                cursor.execute("""
-                    UPDATE cars 
-                    SET name = '-', speeding = 0, braking = 0, status = '待審核', review_time = '-' 
-                    WHERE plate = ?
-                """, (release_plate,))
-                conn.commit()
-                conn.close()
-                st.toast(f"♻️ {release_plate} 訂單已結清！租客已成功移出，車輛回歸車庫。", icon="🔄")
-                time.sleep(0.5)
-                st.rerun()
-
-    if st.session_state["just_submitted"]:
-        st.success("🎉 數據已成功發送至雲端中心！狀態已同步儲存至實體資料庫。")
-        st.session_state["just_submitted"] = False
-
-    st.write("---")
-    st.write("### 📑 UBI 歷史審核與雲端聯防存檔紀錄")
-    conn = sqlite3.connect(DB_FILE)
-    df_history = pd.read_sql_query("SELECT timestamp AS 時間戳記, plate AS 車牌號碼, data_summary AS '審核數據(超速/急煞)', zkp_status AS 'ZKP 驗證閘門', score AS '同態盲算風險總分' FROM history ORDER BY id DESC", conn)
-    conn.close()
-    if len(df_history) > 0:
-        st.dataframe(df_history, use_container_width=True)
-    else:
-        st.info("ℹ️ 目前資料庫尚無歷史紀錄。")
-
-# ==========================================
-# 【分頁二：雲端計算大腦】
-# ==========================================
-with tab2:
-    st.header("☁️ 中立雲端密文盲算中心")
-    db = st.session_state["db"]
-    if db["has_data"]:
-        st.success("🟢 偵測到加密封包傳入")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.warning("🔒 雲端接收到的原始密文數據流：")
-            st.code(f"Enc_Speeding_Data: {db['enc_speeding'][:60]}...", language="text")
-            st.code(f"Enc_Braking_Data:  {db['enc_braking'][:60]}...", language="text")
-        with c2:
-            st.info("🛡️ 零知識證明 (ZKP) 驗證閘門：")
-            if db["zkp_status"] == "Verified":
-                st.success("✅ ZKP 範圍證明驗證通過！該密文合法。")
-                st.metric(label="雲端同態運算狀態", value="盲算完成，結果已轉發")
-            else:
-                st.error("🚨 警告：ZKP 範圍證明驗證失敗！")
-                st.error("🛑 雲端安全防禦機制啟動：拒絕進行同態盲算，直接丟棄該封包。")
-    else:
-        st.info("⏳ 目前雲端佇列無數據。")
-
-# ==========================================
-# 【分頁三：保險公司後台】
-# ==========================================
-with tab3:
-    st.header("🏢 保險公司核心核保後台")
-    db = st.session_state["db"]
-    if db["has_data"] and db["zkp_status"] == "Verified" and db["computed_score"] is not None:
-        st.success("🟢 成功接收由雲端盲算中心轉發的『風險總分密文』")
-        score = db["computed_score"]
-        st.metric(label="🛡️ 最終解密還原：用戶風險扣分總計", value=f"{score} 分")
-        if score < 30:
-            st.success("👑 精算費率等級：A (享有下期保費 8 折優惠)")
-        elif score < 70:
-            st.info("ℹ️ 精算費率等級：B (維持標準保費費率)")
-        else:
-            st.error("⚠️ 精算費率等級：C (高風險駕駛，保費調漲 1.5 倍)")
-    elif db["has_data"] and db["zkp_status"] == "Failed":
-        st.error("❌ 無法取得精算總分：雲端因 ZKP 驗證失敗已攔截該次傳輸。")
-    else:
-        st.info("⏳ 等待雲端盲算中心拋遞最終的總分密文...")
+                    zkp_text, score_text = ("✅ 通過", f"{score_res} 分") if zkp_res == "Verified" else ("🚨 攔截", "計算終止")
+                    cursor.execute("INSERT INTO history (timestamp, plate, data_summary, zkp_status,
