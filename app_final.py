@@ -133,40 +133,43 @@ with tab1:
     st.write("---")
     st.write("### 📑 UBI 歷史審核與雲端聯防存檔紀錄")
     
-    # 讀取實體資料庫的歷史紀錄
     conn = sqlite3.connect(DB_FILE)
     df_history = pd.read_sql_query("SELECT id, timestamp AS 時間戳記, plate AS 車牌號碼, data_summary AS '審核數據(超速/急煞)', zkp_status AS 'ZKP 驗證閘門', score AS '同態盲算風險總分' FROM history ORDER BY id DESC", conn)
     conn.close()
     
     if len(df_history) > 0:
-        # ---- 新增的維護控制工具箱（防過載） ----
+        # ---- 升級版：具備 Double Check 防呆機制的維護工具箱 ----
         col_clean1, col_clean2 = st.columns([2, 1])
         with col_clean1:
-            # 建立單筆刪除下拉選單，選單顯示 id、時間和車牌
             del_options = {f"ID {row['id']} | {row['時間戳記']} | {row['車牌號碼']}": row['id'] for _, row in df_history.iterrows()}
             target_del = st.selectbox("🧹 選擇欲永久抹除的單筆紀錄：", list(del_options.keys()))
-            if st.button("🗑️ 刪除指定紀錄", type="secondary"):
+            
+            # 單筆刪除的防呆勾選框
+            confirm_single = st.checkbox("⚠️ 我確認要「永久刪除」這一筆稽核紀錄（此操作不可逆）", key="chk_single")
+            if st.button("🗑️ 執行單筆刪除", type="secondary", disabled=not confirm_single):
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM history WHERE id = ?", (del_options[target_del],))
                 conn.commit()
                 conn.close()
-                st.toast("🗑️ 該筆歷史紀錄已從實體硬碟中永久抹除！")
+                st.toast("🗑️ 該筆歷史紀錄已成功抹除！")
                 time.sleep(0.5)
                 st.rerun()
+                
         with col_clean2:
             st.write("🚨 **危險管理區**")
-            if st.button("💥 一鍵全清空（釋放硬碟空間）", type="primary"):
+            # 全清空的防呆勾選框
+            confirm_all = st.checkbox("🔥 我確認要「清空整張歷史資料表」（將釋放所有儲存空間）", key="chk_all")
+            if st.button("💥 執行一鍵全清空", type="primary", disabled=not confirm_all):
                 conn = sqlite3.connect(DB_FILE)
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM history")
                 conn.commit()
                 conn.close()
-                st.toast("💥 歷史紀錄表已完全清空！空間已釋放。")
+                st.toast("💥 歷史資料庫已全部重置清空！")
                 time.sleep(0.5)
                 st.rerun()
         
-        # 顯示剔除 'id' 欄位後的乾淨表格供評審看
         st.dataframe(df_history.drop(columns=["id"]), use_container_width=True)
     else:
         st.info("ℹ️ 目前資料庫尚無歷史紀錄。")
