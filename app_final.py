@@ -92,7 +92,7 @@ with tab2:
         st.info("⏳ 目前雲端佇列無數據。")
 
 # ------------------------------------------
-# 【分頁三：保險公司後台】（已移除氣球特效）
+# 【分頁三：保險公司後台】（已完全修復語法錯誤）
 # ------------------------------------------
 with tab3:
     st.header("🏢 保險公司核心核保後台")
@@ -100,8 +100,6 @@ with tab3:
     db = st.session_state["db"]
     if db["has_data"] and db["zkp_status"] == "Verified" and db["computed_score"] is not None:
         st.success("🟢 成功接收由雲端盲算中心轉發的『風險總分密文』")
-        
-        # 這裡原本有 st.balloons()，已經幫你拿掉了
         
         score = db["computed_score"]
         st.metric(label="🛡️ 最終解密還原：用戶風險扣分總計", value=f"{score} 分")
@@ -113,4 +111,9 @@ with tab3:
         else:
             st.error("⚠️ 精算費率等級：C (高風險駕駛，保費調漲 1.5 倍)")
             
-    elif db["has_data"] and db["zkp_status"] ==
+    elif db["has_data"] and db["zkp_status"] == "Failed":
+        st.error("❌ 無法取得精算總分：雲端因 ZKP 驗證失敗已攔截該次傳輸。")
+    else:
+        st.info("⏳ 等待雲端盲算中心拋遞最終的總分密文...")
+            
+    elif db["has_data"] and db["zkp_status"] == "Failed":
