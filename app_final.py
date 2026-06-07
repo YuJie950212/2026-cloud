@@ -28,7 +28,7 @@ with tab1:
         
         with col2:
             st.write("🔒 **邊緣端密碼學處理預覽：**")
-            st.caption("系統處於高流暢模式。點擊下方按鈕將即時調用 Paillier 演算法生成密文。")
+            st.caption("系統處於高流暢模式。點擊下方按鈕將使用演算法生成密文。")
 
         st.write("") 
         submit_button = st.form_submit_button(label="發送至雲端")
