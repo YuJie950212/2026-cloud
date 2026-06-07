@@ -55,7 +55,7 @@ with tab1:
             }
             st.session_state["just_submitted"] = True
         if st.session_state["just_submitted"]:
-            st.success("🎉 數據已成功發送至雲端中心！請點擊切換至『2. 雲端計算大腦』分頁查看。")
+            st.success("數據已成功發送至雲端中心！")
             st.session_state["just_submitted"] = False
 
 #Second
