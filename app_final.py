@@ -14,7 +14,13 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("CREATE TABLE IF NOT EXISTS cars (plate TEXT PRIMARY KEY, name TEXT, speeding INTEGER, braking INTEGER, status TEXT, review_time TEXT)")
-    # 【資料庫升級】為 history 資料表新增 name TEXT 欄位
+    
+    # 【自動修復邏輯】如果舊表沒有 name 欄位，直接刪除舊表，讓系統能順利重新建立新結構
+    try:
+        cursor.execute("SELECT name FROM history LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("DROP TABLE IF EXISTS history")
+        
     cursor.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, plate TEXT, name TEXT, data_summary TEXT, zkp_status TEXT, score TEXT)")
     cursor.execute("SELECT COUNT(*) FROM cars")
     if cursor.fetchone()[0] == 0:
@@ -102,7 +108,6 @@ with tab1:
                     cursor = conn.cursor()
                     cursor.execute("UPDATE cars SET status = '🟢 已審核', review_time = ? WHERE plate = ?", (current_time, selected_plate))
                     zkp_text, score_text = ("✅ 通過", f"{score_res} 分") if zkp_res == "Verified" else ("🚨 攔截", "計算終止")
-                    # 【核心更新】將當前的租客姓名（current_name）同步寫入歷史紀錄表
                     cursor.execute("INSERT INTO history (timestamp, plate, name, data_summary, zkp_status, score) VALUES (?, ?, ?, ?, ?, ?)", (current_time, selected_plate, current_name, f"{speeding}次 / {heavy_braking}次", zkp_text, score_text))
                     conn.commit()
                     conn.close()
@@ -136,7 +141,6 @@ with tab1:
     st.write("### 📑 UBI 歷史審核與雲端聯防存檔紀錄")
     
     conn = sqlite3.connect(DB_FILE)
-    # 【查詢更新】查詢時拉出 name 欄位，並對應到 DataFrame 欄位名稱「租客姓名」
     df_history = pd.read_sql_query("SELECT id, timestamp AS 時間戳記, plate AS 車牌號碼, name AS 租客姓名, data_summary AS '審核數據(超速/急煞)', zkp_status AS 'ZKP 驗證閘門', score AS '同態盲算風險總分' FROM history ORDER BY id DESC", conn)
     conn.close()
     
