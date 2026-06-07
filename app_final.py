@@ -7,7 +7,7 @@ st.set_page_config(page_title="跨平台 UBI 隱私聯防系統原型", page_ico
 st.title("🛡️ 跨平台 UBI 隱私計算與零知識證明（ZKP）聯防系統")
 
 # ==========================================
-# 初始化跨分頁的共享記憶體與「動態車載資料庫」
+# 初始化跨分頁的共享記憶體與「持久化資料庫」
 # ==========================================
 if "db" not in st.session_state:
     st.session_state["db"] = {
@@ -18,7 +18,7 @@ if "db" not in st.session_state:
         "computed_score": None
     }
 
-# 將資料庫存在 session_state 裡，這樣網頁上新增、修改資料才不會消失
+# 【核心升級】初始化常駐的車隊資料庫
 if "car_database" not in st.session_state:
     st.session_state["car_database"] = {
         "車牌號碼": ["ABC-1234", "XYZ-5678", "QQ-9999"],
@@ -28,6 +28,10 @@ if "car_database" not in st.session_state:
         "狀態": ["待審核", "待審核", "待審核"],
         "審核時間": ["-", "-", "-"]
     }
+
+# 【核心升級】初始化「歷史上鏈紀錄鏈」：這個紀錄在點擊送出後會永久追加，不因切換車牌而消失
+if "history_log" not in st.session_state:
+    st.session_state["history_log"] = []
 
 if "current_speeding" not in st.session_state:
     st.session_state["current_speeding"] = 0
@@ -42,48 +46,43 @@ if "just_submitted" not in st.session_state:
 tab1, tab2, tab3 = st.tabs(["🚗 1. 租車平台端 (Edge)", "☁️ 2. 雲端計算大腦 (Cloud)", "🏢 3. 保險公司後台 (Core)"])
 
 # ------------------------------------------
-# 【分頁一：租車平台端】（動態新增與審核完全體）
+# 【分頁一：租車平台端】
 # ------------------------------------------
 with tab1:
     st.header("🚗 邊緣端駕駛數據採集與加密")
     
-    # 【新增功能區】左右分欄：左邊放目前的資料庫，右邊放新增客戶的櫃檯
     col_db, col_add = st.columns([2, 1])
     
     with col_db:
         st.write("### 📡 待處理還車車輛與 OBU 數據清單")
-        st.caption("車聯網資料庫系統：")
-        # 顯示當前的動態資料庫
+        st.caption("車聯網實時車隊狀態：")
         st.table(st.session_state["car_database"])
         
     with col_add:
         st.write("### 📝 新客戶租車登記處")
-        st.caption("當有新客戶臨櫃租車時，在此輸入即可建立新欄位，免改程式碼：")
+        st.caption("當有新客戶臨櫃租車時，新建立之車輛原始數據完美歸零：")
         
-        # 讓店員手動輸入新客戶資訊
         new_plate = st.text_input("新車車牌", value="EX-5566", max_chars=10)
         new_name = st.text_input("客戶姓名", value="陳小木")
         
-        # 模擬車機在租借期間動態產生了某些數據（預設給他們一些隨機安全數值）
-        if st.button("➕ 確認租出（新增至管理清單）", type="primary"):
+        if st.button("➕ 確認租出（新車上路數據歸零）", type="primary"):
             if new_plate in st.session_state["car_database"]["車牌號碼"]:
                 st.error("❌ 該車牌已經在租借列表中了！")
             elif not new_plate or not new_name:
                 st.error("❌ 車牌與姓名不能為空！")
             else:
-                # 把新資料寫進記憶體資料庫
+                # 【修正新問題 1】新租出去的車，車機偵測數據百分之百為 0
                 st.session_state["car_database"]["車牌號碼"].append(new_plate)
                 st.session_state["car_database"]["租客姓名"].append(new_name)
-                st.session_state["car_database"]["車機偵測_超速次數"].append(2) # 預設初始車機數據
-                st.session_state["car_database"]["車機偵測_急煞次數"].append(4) # 預設初始車機數據
+                st.session_state["car_database"]["車機偵測_超速次數"].append(0) 
+                st.session_state["car_database"]["車機偵測_急煞次數"].append(0) 
                 st.session_state["car_database"]["狀態"].append("待審核")
                 st.session_state["car_database"]["審核時間"].append("-")
-                st.toast(f"🟢 成功登記新車輛 {new_plate} ({new_name})！", icon="🚗")
+                st.toast(f"🟢 {new_plate} 已成功出租！行車數據已初始化為 0。", icon="🚗")
                 st.rerun()
 
     st.write("---")
     
-    # 2. 選擇車牌連動機制
     st.write("### 🔍 臨櫃選車與資料拉取")
     plate_options = ["請選擇車牌..."] + st.session_state["car_database"]["車牌號碼"]
     selected_plate = st.selectbox("請選擇當前辦理還車的車牌號碼：", plate_options)
@@ -98,114 +97,7 @@ with tab1:
 
     st.write("### ✍️ 租車公司人工審核與密碼學打包")
 
-    # 3. 審核表單
     with st.form(key="edge_data_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
-            st.write(f"📋 **當前操作車牌：{selected_plate if selected_plate != '請選擇車牌...' else '未選擇'}**")
-            speeding = st.number_input(
-                "審核：超速次數 (0~50)", 
-                min_value=0, 
-                value=st.session_state["current_speeding"]
-            )
-            heavy_braking = st.number_input(
-                "審核：急煞次數 (0~50)", 
-                min_value=0, 
-                value=st.session_state["current_braking"]
-            )
-        
-        with col2:
-            st.write("🔒 **邊緣端密碼學處理預覽：**")
-            st.caption("系統處於高流暢模式。點擊下方按鈕將即時調用 Paillier 演算法將審核數據生成密文。")
-
-        st.write("") 
-        submit_button = st.form_submit_button(label="🚀 審核無誤：打包密文與 ZKP 發送至雲端")
-        
-    if submit_button:
-        if selected_plate == "請選擇車牌...":
-            st.error("❌ 請先在上方下拉選單選擇正確的車牌號碼，再進行送出！")
-        else:
-            with st.spinner("正在進行加密與 ZKP 證明生成..."):
-                time.sleep(0.5) 
-                
-                pub_key, _ = paillier.generate_paillier_keypair()
-                
-                if 0 <= speeding <= 50 and 0 <= heavy_braking <= 50:
-                    zkp_res = "Verified"
-                    score_res = (speeding * 10) + (heavy_braking * 5)
-                else:
-                    zkp_res = "Failed"
-                    score_res = None
-                    
-                st.session_state["db"] = {
-                    "has_data": True,
-                    "enc_speeding": str(pub_key.encrypt(speeding).ciphertext()),
-                    "enc_braking": str(pub_key.encrypt(heavy_braking).ciphertext()),
-                    "zkp_status": zkp_res,
-                    "computed_score": score_res
-                }
-                
-                target_idx = st.session_state["car_database"]["車牌號碼"].index(selected_plate)
-                st.session_state["car_database"]["狀態"][target_idx] = "🟢 已審核"
-                st.session_state["car_database"]["審核時間"][target_idx] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                st.session_state["just_submitted"] = True
-                
-            st.rerun()
-
-    if st.session_state["just_submitted"]:
-        st.success("🎉 數據已成功發送至雲端中心！狀態已同步更新至上方管理清單。")
-        st.session_state["just_submitted"] = False
-
-# ------------------------------------------
-# 【分頁二：雲端計算大腦】
-# ------------------------------------------
-with tab2:
-    st.header("☁️ 中立雲端密文盲算中心")
-    
-    db = st.session_state["db"]
-    if db["has_data"]:
-        st.success("🟢 偵測到加密封包傳入")
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            st.warning("🔒 雲端接收到的原始密文數據流：")
-            st.code(f"Enc_Speeding_Data: {db['enc_speeding'][:60]}...", language="text")
-            st.code(f"Enc_Braking_Data:  {db['enc_braking'][:60]}...", language="text")
-        
-        with c2:
-            st.info("🛡️ 零知識證明 (ZKP) 驗證閘門：")
-            if db["zkp_status"] == "Verified":
-                st.success("✅ ZKP 範圍證明驗證通過！該密文合法。")
-                st.metric(label="雲端同態運算狀態", value="盲算完成，結果已轉發")
-            else:
-                st.error("🚨 警告：ZKP 範圍證明驗證失敗！")
-                st.error("🛑 雲端安全防禦機制啟動：拒絕進行同態盲算，直接丟棄該封包。")
-    else:
-        st.info("⏳ 目前雲端佇列無數據。")
-
-# ------------------------------------------
-# 【分頁三：保險公司後台】
-# ------------------------------------------
-with tab3:
-    st.header("🏢 保險公司核心核保後台")
-    
-    db = st.session_state["db"]
-    if db["has_data"] and db["zkp_status"] == "Verified" and db["computed_score"] is not None:
-        st.success("🟢 成功接收由雲端盲算中心轉發的『風險總分密文』")
-        
-        score = db["computed_score"]
-        st.metric(label="🛡️ 最終解密還原：用戶風險扣分總計", value=f"{score} 分")
-        
-        if score < 30:
-            st.success("👑 精算費率等級：A (享有下期保費 8 折優惠)")
-        elif score < 70:
-            st.info("ℹ️ 精算費率等級：B (維持標準保費費率)")
-        else:
-            st.error("⚠️ 精算費率等級：C (高風險駕駛，保費調漲 1.5 倍)")
-            
-    elif db["has_data"] and db["zkp_status"] == "Failed":
-        st.error("❌ 無法取得精算總分：雲端因 ZKP 驗證失敗已攔截該次傳輸。")
-        
-    else:
-        st.info("⏳ 等待雲端盲算中心拋遞最終的總分密文...")
+            st.write(f"📋 **當前操作車牌：{selected_plate
