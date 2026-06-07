@@ -94,7 +94,7 @@ with tab1:
             submit_button = st.form_submit_button(label="🚀 打包密文與 ZKP 發送至雲端", disabled=is_empty_car)
             
         if is_empty_car and selected_plate != "請選擇車牌...":
-            st.warning("🚨 提示：該車輛目前為車庫空車，無行車數據可供審核。請先至右上方『新客戶租車登記處』指派租客。")
+            st.warning("🚨 提示：該車輛目前為車庫空車，無行車數據可供審核. 請先至右上方『新客戶租車登記處』指派租客。")
 
         if submit_button and not is_empty_car:
             with st.spinner("正在進行加密與 ZKP 證明生成..."):
@@ -146,11 +146,14 @@ with tab1:
     conn.close()
     
     if len(df_history) > 0:
+        # 在資料庫撈出來的 DataFrame 最前面插入一個「選取銷毀」的打勾控制行
         df_history.insert(0, "選取銷毀", False)
+        
         col_btn1, col_btn2 = st.columns([2, 1])
         
         with col_btn1:
-            st.write("💡 **直覺維護模式**：請直接在下方表格的最左側勾選想刪除的資料：")
+            st.write("💡 **管理員面板**：請直接在下方表格最左側勾選欲永久抹除的紀錄：")
+            # 【完美整合】只保留這個可以互動、可以打勾的高級整合表格
             edited_df = st.data_editor(
                 df_history,
                 column_config={"id": None, "選取銷毀": st.column_config.CheckboxColumn(help="勾選以永久抹除此筆紀錄")},
@@ -159,8 +162,10 @@ with tab1:
                 key="history_editor"
             )
             
+            # 計算哪些 ID 被使用者打勾了
             to_delete_ids = edited_df[edited_df["選取銷毀"] == True]["id"].tolist()
             
+            # 有勾選才顯示刪除按鈕
             if len(to_delete_ids) > 0:
                 if st.button(f"🗑️ 確定執行：抹除這 {len(to_delete_ids)} 筆已選取的紀錄", type="secondary"):
                     conn = sqlite3.connect(DB_FILE)
@@ -172,7 +177,7 @@ with tab1:
                     time.sleep(0.5)
                     st.rerun()
                     
-        with col_btn2: # 【修正處】這裡已將原先的 col_clean2 正確對齊修正為 col_btn2
+        with col_btn2:
             st.write("🚨 **危險管理區**")
             confirm_all = st.checkbox("🔥 我確認要「清空整張歷史資料表」（將釋放所有儲存空間）", key="chk_all")
             if st.button("💥 執行一鍵全清空", type="primary", disabled=not confirm_all):
@@ -185,7 +190,7 @@ with tab1:
                 time.sleep(0.5)
                 st.rerun()
         
-        st.dataframe(df_history.drop(columns=["id"]), use_container_width=True)
+        # 【修正核心】刪除了原本放在這裡的舊版死板 st.dataframe(df_history) 表格，達成完全整合！
     else:
         st.info("ℹ️ 目前資料庫尚無歷史紀錄。")
 
