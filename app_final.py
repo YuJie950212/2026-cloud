@@ -2,12 +2,9 @@ import streamlit as st
 from phe import paillier
 import time
 
-st.set_page_config(page_title="跨平台 UBI 隱私聯防系統原型", page_icon="🛡️", layout="wide")
-st.title("🛡️ 跨平台 UBI 隱私計算與零知識證明（ZKP）聯防系統")
+st.set_page_config(page_title="跨平台 UBI 隱私聯防系統原型", page_icon="", layout="wide")
+st.title("跨平台 UBI 隱私計算與零知識證明（ZKP）聯防系統")
 
-# ==========================================
-# 初始化跨分頁的共享記憶體
-# ==========================================
 if "db" not in st.session_state:
     st.session_state["db"] = {
         "has_data": False,
@@ -17,16 +14,11 @@ if "db" not in st.session_state:
         "computed_score": None
     }
 
-# ==========================================
-# 建立網頁頂端的三個獨立站點分頁
-# ==========================================
-tab1, tab2, tab3 = st.tabs(["🚗 1. 租車平台端 (Edge)", "☁️ 2. 雲端計算大腦 (Cloud)", "🏢 3. 保險公司後台 (Core)"])
+tab1, tab2, tab3 = st.tabs(["1. 租車平台端 (Edge)", "2. 雲端計算大腦 (Cloud)", "3. 保險公司後台 (Core)"])
 
-# ------------------------------------------
-# 【分頁一：租車平台端】（流暢無卡頓表單版，已移除多餘提示）
-# ------------------------------------------
+#first
 with tab1:
-    st.header("🚗 邊緣端駕駛數據採集與加密")
+    st.header("邊緣端駕駛數據採集與加密")
     
     with st.form(key="edge_data_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
@@ -39,10 +31,10 @@ with tab1:
             st.caption("系統處於高流暢模式。點擊下方按鈕將即時調用 Paillier 演算法生成密文。")
 
         st.write("") 
-        submit_button = st.form_submit_button(label="🚀 打包密文與 ZKP 證明，發送至雲端大腦")
+        submit_button = st.form_submit_button(label="發送至雲端")
         
     if submit_button:
-        with st.spinner("正在進行加密與 ZKP 證明生成..."):
+        with st.spinner("正在上傳..."):
             time.sleep(0.5) 
             
             pub_key, _ = paillier.generate_paillier_keypair()
@@ -68,7 +60,7 @@ with tab1:
 # 【分頁二：雲端計算大腦】
 # ------------------------------------------
 with tab2:
-    st.header("☁️ 中立雲端密文盲算中心")
+    st.header("中立雲端密文盲算中心")
     
     db = st.session_state["db"]
     if db["has_data"]:
@@ -81,10 +73,10 @@ with tab2:
             st.code(f"Enc_Braking_Data:  {db['enc_braking'][:60]}...", language="text")
         
         with c2:
-            st.info("🛡️ 零知識證明 (ZKP) 驗證閘門：")
+            st.info("ZKP驗證閘門：")
             if db["zkp_status"] == "Verified":
                 st.success("✅ ZKP 範圍證明驗證通過！該密文合法。")
-                st.metric(label="雲端同態運算狀態", value="盲算完成，結果已轉發")
+                st.metric(label="雲端同態運算狀態", value="結果已轉發")
             else:
                 st.error("🚨 警告：ZKP 範圍證明驗證失敗！")
                 st.error("🛑 雲端安全防禦機制啟動：拒絕進行同態盲算，直接丟棄該封包。")
@@ -99,7 +91,7 @@ with tab3:
     
     db = st.session_state["db"]
     if db["has_data"] and db["zkp_status"] == "Verified" and db["computed_score"] is not None:
-        st.success("🟢 成功接收由雲端盲算中心轉發的『風險總分密文』")
+        st.success("🟢 成功接收由雲端中心的『風險總分密文』")
         
         score = db["computed_score"]
         st.metric(label="🛡️ 最終解密還原：用戶風險扣分總計", value=f"{score} 分")
