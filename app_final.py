@@ -92,7 +92,7 @@ with tab2:
         st.info("⏳ 目前雲端佇列無數據。")
 
 # ------------------------------------------
-# 【分頁三：保險公司後台】（已完全修復語法錯誤）
+# 【分頁三：保險公司後台】（已完全修復 elif/else 順序錯誤）
 # ------------------------------------------
 with tab3:
     st.header("🏢 保險公司核心核保後台")
@@ -113,7 +113,7 @@ with tab3:
             
     elif db["has_data"] and db["zkp_status"] == "Failed":
         st.error("❌ 無法取得精算總分：雲端因 ZKP 驗證失敗已攔截該次傳輸。")
+        
     else:
+        # else 必須在最後面作為預設狀態
         st.info("⏳ 等待雲端盲算中心拋遞最終的總分密文...")
-            
-    elif db["has_data"] and db["zkp_status"] == "Failed":
