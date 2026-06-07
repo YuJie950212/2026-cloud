@@ -14,7 +14,8 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("CREATE TABLE IF NOT EXISTS cars (plate TEXT PRIMARY KEY, name TEXT, speeding INTEGER, braking INTEGER, status TEXT, review_time TEXT)")
-    cursor.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, plate TEXT, data_summary TEXT, zkp_status TEXT, score TEXT)")
+    # 【資料庫升級】為 history 資料表新增 name TEXT 欄位
+    cursor.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, plate TEXT, name TEXT, data_summary TEXT, zkp_status TEXT, score TEXT)")
     cursor.execute("SELECT COUNT(*) FROM cars")
     if cursor.fetchone()[0] == 0:
         initial_cars = [("ABC-1234", "張大明", 3, 5, "待審核", "-"), ("XYZ-5678", "王小美", 1, 2, "待審核", "-"), ("QQ-9999", "李黑客(惡意測試)", 99, 88, "待審核", "-")]
@@ -69,18 +70,18 @@ with tab1:
         plate_options = ["請選擇車牌..."] + df_cars["車牌號碼"].tolist()
         selected_plate = st.selectbox("選擇要辦理還車審核的車牌：", plate_options)
         
-        current_speeding, current_braking = 0, 0
+        current_speeding, current_braking, current_name = 0, 0, "-"
         if selected_plate != "請選擇車牌...":
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            cursor.execute("SELECT speeding, braking FROM cars WHERE plate = ?", (selected_plate,))
+            cursor.execute("SELECT speeding, braking, name FROM cars WHERE plate = ?", (selected_plate,))
             row = cursor.fetchone()
             if row:
-                current_speeding, current_braking = row[0], row[1]
+                current_speeding, current_braking, current_name = row[0], row[1], row[2]
             conn.close()
 
         with st.form(key="edge_data_form", clear_on_submit=False):
-            st.write(f"📋 **當前操作車牌：{selected_plate if selected_plate != '請選擇車牌...' else '未選擇'}**")
+            st.write(f"📋 **當前操作車牌：{selected_plate if selected_plate != '請選擇車牌...' else '未選擇'}（租客：{current_name}）**")
             speeding = st.number_input("審核：超速次數 (0~50)", min_value=0, value=current_speeding)
             heavy_braking = st.number_input("審核：急煞次數 (0~50)", min_value=0, value=current_braking)
             submit_button = st.form_submit_button(label="🚀 打包密文與 ZKP 發送至雲端")
@@ -101,7 +102,8 @@ with tab1:
                     cursor = conn.cursor()
                     cursor.execute("UPDATE cars SET status = '🟢 已審核', review_time = ? WHERE plate = ?", (current_time, selected_plate))
                     zkp_text, score_text = ("✅ 通過", f"{score_res} 分") if zkp_res == "Verified" else ("🚨 攔截", "計算終止")
-                    cursor.execute("INSERT INTO history (timestamp, plate, data_summary, zkp_status, score) VALUES (?, ?, ?, ?, ?)", (current_time, selected_plate, f"{speeding}次 / {heavy_braking}次", zkp_text, score_text))
+                    # 【核心更新】將當前的租客姓名（current_name）同步寫入歷史紀錄表
+                    cursor.execute("INSERT INTO history (timestamp, plate, name, data_summary, zkp_status, score) VALUES (?, ?, ?, ?, ?, ?)", (current_time, selected_plate, current_name, f"{speeding}次 / {heavy_braking}次", zkp_text, score_text))
                     conn.commit()
                     conn.close()
                     st.session_state["just_submitted"] = True
@@ -134,17 +136,15 @@ with tab1:
     st.write("### 📑 UBI 歷史審核與雲端聯防存檔紀錄")
     
     conn = sqlite3.connect(DB_FILE)
-    df_history = pd.read_sql_query("SELECT id, timestamp AS 時間戳記, plate AS 車牌號碼, data_summary AS '審核數據(超速/急煞)', zkp_status AS 'ZKP 驗證閘門', score AS '同態盲算風險總分' FROM history ORDER BY id DESC", conn)
+    # 【查詢更新】查詢時拉出 name 欄位，並對應到 DataFrame 欄位名稱「租客姓名」
+    df_history = pd.read_sql_query("SELECT id, timestamp AS 時間戳記, plate AS 車牌號碼, name AS 租客姓名, data_summary AS '審核數據(超速/急煞)', zkp_status AS 'ZKP 驗證閘門', score AS '同態盲算風險總分' FROM history ORDER BY id DESC", conn)
     conn.close()
     
     if len(df_history) > 0:
-        # ---- 升級版：具備 Double Check 防呆機制的維護工具箱 ----
         col_clean1, col_clean2 = st.columns([2, 1])
         with col_clean1:
-            del_options = {f"ID {row['id']} | {row['時間戳記']} | {row['車牌號碼']}": row['id'] for _, row in df_history.iterrows()}
+            del_options = {f"ID {row['id']} | {row['時間戳記']} | {row['車牌號碼']} ({row['租客姓名']})": row['id'] for _, row in df_history.iterrows()}
             target_del = st.selectbox("🧹 選擇欲永久抹除的單筆紀錄：", list(del_options.keys()))
-            
-            # 單筆刪除的防呆勾選框
             confirm_single = st.checkbox("⚠️ 我確認要「永久刪除」這一筆稽核紀錄（此操作不可逆）", key="chk_single")
             if st.button("🗑️ 執行單筆刪除", type="secondary", disabled=not confirm_single):
                 conn = sqlite3.connect(DB_FILE)
@@ -158,7 +158,6 @@ with tab1:
                 
         with col_clean2:
             st.write("🚨 **危險管理區**")
-            # 全清空的防呆勾選框
             confirm_all = st.checkbox("🔥 我確認要「清空整張歷史資料表」（將釋放所有儲存空間）", key="chk_all")
             if st.button("💥 執行一鍵全清空", type="primary", disabled=not confirm_all):
                 conn = sqlite3.connect(DB_FILE)
