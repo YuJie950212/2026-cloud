@@ -14,13 +14,10 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("CREATE TABLE IF NOT EXISTS cars (plate TEXT PRIMARY KEY, name TEXT, speeding INTEGER, braking INTEGER, status TEXT, review_time TEXT)")
-    
-    # 【自動修復邏輯】如果舊表沒有 name 欄位，直接刪除舊表，讓系統能順利重新建立新結構
     try:
         cursor.execute("SELECT name FROM history LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("DROP TABLE IF EXISTS history")
-        
     cursor.execute("CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, plate TEXT, name TEXT, data_summary TEXT, zkp_status TEXT, score TEXT)")
     cursor.execute("SELECT COUNT(*) FROM cars")
     if cursor.fetchone()[0] == 0:
@@ -86,33 +83,41 @@ with tab1:
                 current_speeding, current_braking, current_name = row[0], row[1], row[2]
             conn.close()
 
+        # 【空車防呆核心】判定當前選中的車輛是否為無人租借的空車
+        is_empty_car = (current_name == "-") or (selected_plate == "請選擇車牌...")
+
         with st.form(key="edge_data_form", clear_on_submit=False):
-            st.write(f"📋 **當前操作車牌：{selected_plate if selected_plate != '請選擇車牌...' else '未選擇'}（租客：{current_name}）**")
-            speeding = st.number_input("審核：超速次數 (0~50)", min_value=0, value=current_speeding)
-            heavy_braking = st.number_input("審核：急煞次數 (0~50)", min_value=0, value=current_braking)
-            submit_button = st.form_submit_button(label="🚀 打包密文與 ZKP 發送至雲端")
+            st.write(f"📋 **當前操作車牌：{selected_plate if selected_plate != '請選擇車牌...' else '未選擇'}**")
+            st.write(f"👤 **當前車輛租客：{ '❌ 空車待租 (欄位鎖定)' if current_name == '-' else current_name }**")
             
-        if submit_button:
-            if selected_plate == "請選擇車牌...":
-                st.error("❌ 請先選擇正確的車牌號碼！")
-            else:
-                with st.spinner("正在進行加密與 ZKP 證明生成..."):
-                    time.sleep(0.5)
-                    pub_key, _ = paillier.generate_paillier_keypair()
-                    zkp_res, score_res = ("Verified", (speeding * 10) + (heavy_braking * 5)) if (0 <= speeding <= 50 and 0 <= heavy_braking <= 50) else ("Failed", None)
-                    
-                    st.session_state["db"] = {"has_data": True, "enc_speeding": str(pub_key.encrypt(speeding).ciphertext()), "enc_braking": str(pub_key.encrypt(heavy_braking).ciphertext()), "zkp_status": zkp_res, "computed_score": score_res}
-                    
-                    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    conn = sqlite3.connect(DB_FILE)
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE cars SET status = '🟢 已審核', review_time = ? WHERE plate = ?", (current_time, selected_plate))
-                    zkp_text, score_text = ("✅ 通過", f"{score_res} 分") if zkp_res == "Verified" else ("🚨 攔截", "計算終止")
-                    cursor.execute("INSERT INTO history (timestamp, plate, name, data_summary, zkp_status, score) VALUES (?, ?, ?, ?, ?, ?)", (current_time, selected_plate, current_name, f"{speeding}次 / {heavy_braking}次", zkp_text, score_text))
-                    conn.commit()
-                    conn.close()
-                    st.session_state["just_submitted"] = True
-                st.rerun()
+            # 如果是空車，輸入框會被 disabled 鎖定
+            speeding = st.number_input("審核：超速次數 (0~50)", min_value=0, value=current_speeding, disabled=is_empty_car)
+            heavy_braking = st.number_input("審核：急煞次數 (0~50)", min_value=0, value=current_braking, disabled=is_empty_car)
+            
+            # 如果是空車，按鈕也會被鎖定無法點擊
+            submit_button = st.form_submit_button(label="🚀 打包密文與 ZKP 發送至雲端", disabled=is_empty_car)
+            
+        if is_empty_car and selected_plate != "請選擇車牌...":
+            st.warning("🚨 提示：該車輛目前為車庫空車，無行車數據可供審核。請先至右上方『新客戶租車登記處』指派租客。")
+
+        if submit_button and not is_empty_car:
+            with st.spinner("正在進行加密與 ZKP 證明生成..."):
+                time.sleep(0.5)
+                pub_key, _ = paillier.generate_paillier_keypair()
+                zkp_res, score_res = ("Verified", (speeding * 10) + (heavy_braking * 5)) if (0 <= speeding <= 50 and 0 <= heavy_braking <= 50) else ("Failed", None)
+                
+                st.session_state["db"] = {"has_data": True, "enc_speeding": str(pub_key.encrypt(speeding).ciphertext()), "enc_braking": str(pub_key.encrypt(heavy_braking).ciphertext()), "zkp_status": zkp_res, "computed_score": score_res}
+                
+                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("UPDATE cars SET status = '🟢 已審核', review_time = ? WHERE plate = ?", (current_time, selected_plate))
+                zkp_text, score_text = ("✅ 通過", f"{score_res} 分") if zkp_res == "Verified" else ("🚨 攔截", "計算終止")
+                cursor.execute("INSERT INTO history (timestamp, plate, name, data_summary, zkp_status, score) VALUES (?, ?, ?, ?, ?, ?)", (current_time, selected_plate, current_name, f"{speeding}次 / {heavy_braking}次", zkp_text, score_text))
+                conn.commit()
+                conn.close()
+                st.session_state["just_submitted"] = True
+            st.rerun()
 
     with col_release:
         st.write("### 🔄 2. 還車結帳與移除租客")
