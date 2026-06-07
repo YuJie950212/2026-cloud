@@ -4,10 +4,9 @@ import time
 
 st.set_page_config(page_title="跨平台 UBI 隱私聯防系統原型", page_icon="🛡️", layout="wide")
 st.title("🛡️ 跨平台 UBI 隱私計算與零知識證明（ZKP）聯防系統")
-st.write("本系統模擬分散式微服務架構，為方便現場 Demo 資料流，將三個獨立站點整合於統一決策面板呈現。")
 
 # ==========================================
-# 初始化跨分頁的共享記憶體 (模擬網路通訊暫存)
+# 初始化跨分頁的共享記憶體
 # ==========================================
 if "db" not in st.session_state:
     st.session_state["db"] = {
@@ -24,42 +23,30 @@ if "db" not in st.session_state:
 tab1, tab2, tab3 = st.tabs(["🚗 1. 租車平台端 (Edge)", "☁️ 2. 雲端計算大腦 (Cloud)", "🏢 3. 保險公司後台 (Core)"])
 
 # ------------------------------------------
-# 【分頁一：租車平台端】
+# 【分頁一：租車平台端】（流暢無卡頓表單版，已移除多餘提示）
 # ------------------------------------------
 with tab1:
     st.header("🚗 邊緣端駕駛數據採集與加密")
-    st.info("💡 提示：現在您可以連續快速調整數字，網頁與按鈕絕對不會卡頓變暗。調整完畢後，按下最下方的按鈕即可打包送出。")
     
-    # 【關鍵改良】用 st.form 把輸入框與按鈕打包在一起
-    # 這樣在輸入數字時，Streamlit 會完全靜音，不會去刷新網頁或讓按鈕變暗！
     with st.form(key="edge_data_form", clear_on_submit=False):
-        
         col1, col2 = st.columns(2)
         with col1:
-            # 這裡的輸入框在打字或點擊時，按鈕絕對不會跟著變暗
-            speeding = st.number_input("超速次數 (合法範圍: 0~50)", min_value=0, value=3)
-            heavy_braking = st.number_input("急煞次數 (合法範圍: 0~50)", min_value=0, value=5)
+            speeding = st.number_input("超速次數 (0~50)", min_value=0, value=3)
+            heavy_braking = st.number_input("急煞次數 (0~50)", min_value=0, value=5)
         
         with col2:
             st.write("🔒 **邊緣端密碼學處理預覽：**")
-            # 為了讓即時預覽不卡頓，這裡放一個靜態提示，按下按鈕才會真正觸發密碼學運算
-            st.caption("✨ 系統處於高流暢模式。當您點擊下方按鈕時，將即時調用 Paillier 演算法生成對稱密文。")
+            st.caption("系統處於高流暢模式。點擊下方按鈕將即時調用 Paillier 演算法生成密文。")
 
-        st.write("") # 留空行
+        st.write("") 
+        submit_button = st.form_submit_button(label="🚀 打包密文與 ZKP 證明，發送至雲端大腦")
         
-        # 表單專用的送出按鈕（平時永遠亮著，隨時可以點擊）
-        submit_button = st.form_submit_with_no_click_changes = st.form_submit_button(
-            label="🚀 打包密文與 ZKP 證明，發送至雲端大腦"
-        )
-        
-    # 当使用者「真正點擊按鈕」後，才一次性觸發底下的密碼學運算與轉圈圈
     if submit_button:
-        with st.spinner("正在進行非對稱同態加密與 ZKP 範圍證明生成..."):
-            time.sleep(0.8) # 模擬運算延遲
+        with st.spinner("正在進行加密與 ZKP 證明生成..."):
+            time.sleep(0.5) 
             
             pub_key, _ = paillier.generate_paillier_keypair()
             
-            # ZKP 範圍證明檢查
             if 0 <= speeding <= 50 and 0 <= heavy_braking <= 50:
                 zkp_res = "Verified"
                 score_res = (speeding * 10) + (heavy_braking * 5)
@@ -67,7 +54,6 @@ with tab1:
                 zkp_res = "Failed"
                 score_res = None
                 
-            # 將結果寫入共享記憶體
             st.session_state["db"] = {
                 "has_data": True,
                 "enc_speeding": str(pub_key.encrypt(speeding).ciphertext()),
@@ -75,20 +61,18 @@ with tab1:
                 "zkp_status": zkp_res,
                 "computed_score": score_res
             }
-        
-        # 跳出成功提示，並強制重新渲染，讓二、三頁同步看到
-        st.success("🎉 數據已成功進行密碼學打包，並拋遞至雲端中心！請點擊切換至『2. 雲端計算大腦』分頁查看。")
+        st.success("🎉 數據已成功發送至雲端中心！")
         st.rerun()
+
 # ------------------------------------------
 # 【分頁二：雲端計算大腦】
 # ------------------------------------------
 with tab2:
     st.header("☁️ 中立雲端密文盲算中心")
-    st.info("核心優勢：雲端平台自始至終**沒有解密私鑰**，也**看不到明文**，純粹在密文狀態下進行 ZKP 驗證與同態加法盲算。")
     
     db = st.session_state["db"]
     if db["has_data"]:
-        st.success("🟢 【即時連線成功】偵測到來自租車平台端(Port 8501-Simulated)的加密封包！")
+        st.success("🟢 偵測到加密封包傳入")
         
         c1, c2 = st.columns(2)
         with c1:
@@ -99,42 +83,34 @@ with tab2:
         with c2:
             st.info("🛡️ 零知識證明 (ZKP) 驗證閘門：")
             if db["zkp_status"] == "Verified":
-                st.success("✅ ZKP 範圍證明驗證通過！證明該密文對應的明文在 [0~50] 合法區間內，未遭惡意竄改。")
+                st.success("✅ ZKP 範圍證明驗證通過！該密文合法。")
                 st.metric(label="雲端同態運算狀態", value="盲算完成，結果已轉發")
-                st.caption("雲端已在不解密情況下，將超速與急煞密文進行同態加權疊加，並將全新的『總分密文』拋遞給保險公司。")
             else:
-                st.error("🚨 警告：ZKP 範圍證明驗證失敗！檢測到該密文明文超出合規範圍（涉嫌惡意數據毒化攻擊）！")
-                st.error("🛑 雲端安全防禦機制啟動：拒絕進行同態盲算，直接丟棄該封包，確保後台不受髒資料污染。")
+                st.error("🚨 警告：ZKP 範圍證明驗證失敗！")
+                st.error("🛑 雲端安全防禦機制啟動：拒絕進行同態盲算，直接丟棄該封包。")
     else:
-        st.info("⏳ 目前雲端佇列無數據。請先在第一頁『租車平台端』輸入數據並點擊發送。")
+        st.info("⏳ 目前雲端佇列無數據。")
 
 # ------------------------------------------
-# 【分頁三：保險公司後台】
+# 【分頁三：保險公司後台】（已移除氣球特效）
 # ------------------------------------------
 with tab3:
     st.header("🏢 保險公司核心核保後台")
-    st.info("隱私保護：保險公司獨家持有**解密私鑰**。它拿不到用戶詳細的每日行車軌跡明文，只能解密雲端算好的總分，用來決定最終費率。")
     
     db = st.session_state["db"]
     if db["has_data"] and db["zkp_status"] == "Verified" and db["computed_score"] is not None:
-        st.success("🟢 成功接收由雲端盲算中心轉發的『風險總分密文』！")
-        st.write("🔑 正在調用核心硬體安全模組 (HSM) 與私鑰進行最終解密...")
+        st.success("🟢 成功接收由雲端盲算中心轉發的『風險總分密文』")
         
-        # 觸發氣球特效
-        st.balloons()
+        # 這裡原本有 st.balloons()，已經幫你拿掉了
         
         score = db["computed_score"]
         st.metric(label="🛡️ 最終解密還原：用戶風險扣分總計", value=f"{score} 分")
         
-        # 商業定價邏輯
         if score < 30:
-            st.success("👑 精算費率等級：A (駕駛行為極佳，享有下期保費 8 折最優待！)")
+            st.success("👑 精算費率等級：A (享有下期保費 8 折優惠)")
         elif score < 70:
-            st.info("ℹ️ 精算費率等級：B (駕駛行為正常，維持標準保費費率)")
+            st.info("ℹ️ 精算費率等級：B (維持標準保費費率)")
         else:
-            st.error("⚠️ 精算費率等級：C (高風險駕駛！觸發懲罰性條款，保費調漲 1.5 倍)")
+            st.error("⚠️ 精算費率等級：C (高風險駕駛，保費調漲 1.5 倍)")
             
-    elif db["has_data"] and db["zkp_status"] == "Failed":
-        st.error("❌ 無法取得精算總分：雲端因 ZKP 驗證失敗已攔截該次傳輸，保險公司未收到任何合法的盲算結果。")
-    else:
-        st.info("⏳ 等待雲端盲算中心拋遞最終的總分密文...")
+    elif db["has_data"] and db["zkp_status"] ==
