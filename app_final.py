@@ -83,18 +83,14 @@ with tab1:
                 current_speeding, current_braking, current_name = row[0], row[1], row[2]
             conn.close()
 
-        # 【空車防呆核心】判定當前選中的車輛是否為無人租借的空車
         is_empty_car = (current_name == "-") or (selected_plate == "請選擇車牌...")
 
         with st.form(key="edge_data_form", clear_on_submit=False):
             st.write(f"📋 **當前操作車牌：{selected_plate if selected_plate != '請選擇車牌...' else '未選擇'}**")
             st.write(f"👤 **當前車輛租客：{ '❌ 空車待租 (欄位鎖定)' if current_name == '-' else current_name }**")
             
-            # 如果是空車，輸入框會被 disabled 鎖定
             speeding = st.number_input("審核：超速次數 (0~50)", min_value=0, value=current_speeding, disabled=is_empty_car)
             heavy_braking = st.number_input("審核：急煞次數 (0~50)", min_value=0, value=current_braking, disabled=is_empty_car)
-            
-            # 如果是空車，按鈕也會被鎖定無法點擊
             submit_button = st.form_submit_button(label="🚀 打包密文與 ZKP 發送至雲端", disabled=is_empty_car)
             
         if is_empty_car and selected_plate != "請選擇車牌...":
@@ -150,21 +146,39 @@ with tab1:
     conn.close()
     
     if len(df_history) > 0:
-        col_clean1, col_clean2 = st.columns([2, 1])
-        with col_clean1:
-            del_options = {f"ID {row['id']} | {row['時間戳記']} | {row['車牌號碼']} ({row['租客姓名']})": row['id'] for _, row in df_history.iterrows()}
-            target_del = st.selectbox("🧹 選擇欲永久抹除的單筆紀錄：", list(del_options.keys()))
-            confirm_single = st.checkbox("⚠️ 我確認要「永久刪除」這一筆稽核紀錄（此操作不可逆）", key="chk_single")
-            if st.button("🗑️ 執行單筆刪除", type="secondary", disabled=not confirm_single):
-                conn = sqlite3.connect(DB_FILE)
-                cursor = conn.cursor()
-                cursor.execute("DELETE FROM history WHERE id = ?", (del_options[target_del],))
-                conn.commit()
-                conn.close()
-                st.toast("🗑️ 該筆歷史紀錄已成功抹除！")
-                time.sleep(0.5)
-                st.rerun()
-                
+        # 在 dataframe 加上一欄「選取銷毀」，預設值全是 False (沒勾選)
+        df_history.insert(0, "選取銷毀", False)
+        
+        # 建立控制按鈕區
+        col_btn1, col_btn2 = st.columns([2, 1])
+        
+        with col_btn1:
+            st.write("💡 **直覺維護模式**：請直接在下方表格的最左側勾選想刪除的資料：")
+            # 運用進階 st.data_editor 讓表格可以直接互動打勾
+            edited_df = st.data_editor(
+                df_history,
+                column_config={"id": None, "選取銷毀": st.column_config.CheckboxColumn(help="勾選以永久抹除此筆紀錄")},
+                disabled=["id", "時間戳記", "車牌號碼", "租客姓名", "審核數據(超速/急煞)", "ZKP 驗證閘門", "同態盲算風險總分"],
+                use_container_width=True,
+                key="history_editor"
+            )
+            
+            # 抓出到底有哪些列被使用者打勾了
+            to_delete_ids = edited_df[edited_df["選取銷毀"] == True]["id"].tolist()
+            
+            # 只有當使用者「真的有在表格打勾」時，才會動態顯示刪除按鈕，實現高質感防呆
+            if len(to_delete_ids) > 0:
+                if st.button(f"🗑️ 確定執行：抹除這 {len(to_delete_ids)} 筆已選取的紀錄", type="secondary"):
+                    conn = sqlite3.connect(DB_FILE)
+                    cursor = conn.cursor()
+                    # 批次刪除所有被打勾的 ID
+                    cursor.execute(f"DELETE FROM history WHERE id IN ({','.join(['?']*len(to_delete_ids))})", to_delete_ids)
+                    conn.commit()
+                    conn.close()
+                    st.toast("🗑️ 所選取的歷史紀錄已從硬碟中成功抹除！")
+                    time.sleep(0.5)
+                    st.rerun()
+                    
         with col_clean2:
             st.write("🚨 **危險管理區**")
             confirm_all = st.checkbox("🔥 我確認要「清空整張歷史資料表」（將釋放所有儲存空間）", key="chk_all")
@@ -177,8 +191,6 @@ with tab1:
                 st.toast("💥 歷史資料庫已全部重置清空！")
                 time.sleep(0.5)
                 st.rerun()
-        
-        st.dataframe(df_history.drop(columns=["id"]), use_container_width=True)
     else:
         st.info("ℹ️ 目前資料庫尚無歷史紀錄。")
 
