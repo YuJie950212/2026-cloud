@@ -18,7 +18,6 @@ if "db" not in st.session_state:
         "computed_score": None
     }
 
-# 【核心升級】初始化常駐的車隊資料庫
 if "car_database" not in st.session_state:
     st.session_state["car_database"] = {
         "車牌號碼": ["ABC-1234", "XYZ-5678", "QQ-9999"],
@@ -29,7 +28,6 @@ if "car_database" not in st.session_state:
         "審核時間": ["-", "-", "-"]
     }
 
-# 【核心升級】初始化「歷史上鏈紀錄鏈」：這個紀錄在點擊送出後會永久追加，不因切換車牌而消失
 if "history_log" not in st.session_state:
     st.session_state["history_log"] = []
 
@@ -46,7 +44,7 @@ if "just_submitted" not in st.session_state:
 tab1, tab2, tab3 = st.tabs(["🚗 1. 租車平台端 (Edge)", "☁️ 2. 雲端計算大腦 (Cloud)", "🏢 3. 保險公司後台 (Core)"])
 
 # ------------------------------------------
-# 【分頁一：租車平台端】
+# 【分頁一：租車平台端】（完全修復表單按鈕縮進版）
 # ------------------------------------------
 with tab1:
     st.header("🚗 邊緣端駕駛數據採集與加密")
@@ -71,7 +69,6 @@ with tab1:
             elif not new_plate or not new_name:
                 st.error("❌ 車牌與姓名不能為空！")
             else:
-                # 【修正新問題 1】新租出去的車，車機偵測數據百分之百為 0
                 st.session_state["car_database"]["車牌號碼"].append(new_plate)
                 st.session_state["car_database"]["租客姓名"].append(new_name)
                 st.session_state["car_database"]["車機偵測_超速次數"].append(0) 
@@ -97,7 +94,26 @@ with tab1:
 
     st.write("### ✍️ 租車公司人工審核與密碼學打包")
 
+    # 這裡所有的程式碼都完美鎖在表單 inside
     with st.form(key="edge_data_form", clear_on_submit=False):
         col1, col2 = st.columns(2)
         with col1:
             st.write(f"📋 **當前操作車牌：{selected_plate if selected_plate != '請選擇車牌...' else '未選擇'}**")
+            speeding = st.number_input(
+                "審核：超速次數 (0~50)", 
+                min_value=0, 
+                value=st.session_state["current_speeding"]
+            )
+            heavy_braking = st.number_input(
+                "審核：急煞次數 (0~50)", 
+                min_value=0, 
+                value=st.session_state["current_braking"]
+            )
+        
+        with col2:
+            st.write("🔒 **邊緣端密碼學處理預覽：**")
+            st.caption("系統處於高流暢模式。點擊下方按鈕將即時調用 Paillier 演算法將審核數據生成密文。")
+
+        st.write("") 
+        # 按鈕對齊完美包在 form 之中
+        submit_button = st.form_submit_
